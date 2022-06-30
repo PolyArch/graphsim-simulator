@@ -1,55 +1,98 @@
-#export LD_LIBRARY_PATH=/home/vidushi/graphsim/DRAMSim2/:$LD_LIBRARY_PATH
+ifndef REAL_MULTICAST
+REAL_MULTICAST=1
+endif
+
+ifndef bus_width
+bus_width=64 # 16
+endif
+
+ifndef ABFS
+ABFS=1
+endif
+
+ifndef WORKING_CACHE
+WORKING_CACHE=0
+endif
+
+ifndef FIFO
+FIFO=1
+endif
+
+ifndef BLOCKED_DFS
+BLOCKED_DFS=0
+endif
+
+ifndef SRC_LOC
+SRC_LOC=0
+endif
+
+ifndef SPATIAL_STRIDE_FACTOR
+SPATIAL_STRIDE_FACTOR=8
+endif
 
 ifndef PROFILING
 PROFILING=0
 endif
 
 ifndef PERFECT_NET
-PERFECT_NET=1
+PERFECT_NET=0
 endif
 
 ifndef DECOMPOSABLE
 DECOMPOSABLE=1
 endif
 
-ifndef REAL_MULTICAST
-REAL_MULTICAST=1
+ifndef process_thr
+process_thr=16
 endif
 
-ifndef bus_width
-bus_width=16 # 64
+ifndef core_cnt
+core_cnt=16
 endif
 
-ifndef ABFS
-ABFS=0
+ifndef num_rows
+num_rows=4
 endif
+
+# should i keep it equal to core_cnt?
+ifndef num_banks
+num_banks=256
+endif
+
+ifndef MODULO
+MODULO=0
+endif
+
+
+
+ifndef NETWORK
+NETWORK=1
+endif
+
+
 
 ifndef ALL_EDGE_ACCESS
 ALL_EDGE_ACCESS=0
 endif
 
 ifndef PRAC
-PRAC=0
+PRAC=1
 endif
 
 ifndef PERFECT_LB
-PERFECT_LB=1
+PERFECT_LB=0
 endif
 
 ifndef TASK_QUEUE_SIZE
-TASK_QUEUE_SIZE=51200
+TASK_QUEUE_SIZE=256
 endif
 
 ifndef COMPLETION_BUFFER_SIZE
-COMPLETION_BUFFER_SIZE=1024
+COMPLETION_BUFFER_SIZE=256 # 1024
 endif
 
 ifndef NUMA_CONTENTION
 NUMA_CONTENTION=0
-endif
-
-ifndef SPATIAL_STRIDE_FACTOR
-SPATIAL_STRIDE_FACTOR=8
 endif
 
 ifndef HRC_XBAR
@@ -94,31 +137,6 @@ endif
 
 ifndef WORK_STEALING
 WORK_STEALING=1
-endif
-
-ifndef SRC_LOC
-SRC_LOC=0
-endif
-
-ifndef process_thr
-process_thr=16
-endif
-
-ifndef core_cnt
-core_cnt=1 # 16
-endif
-
-ifndef num_rows
-num_rows=1 # 4
-endif
-
-# should i keep it equal to core_cnt?
-ifndef num_banks
-num_banks=256
-endif
-
-ifndef NETWORK
-NETWORK=1
 endif
 
 # ------------relevant parameters for ideal experiments
@@ -192,7 +210,7 @@ HASH_JOIN=0
 endif
 
 ifndef FIFO_DEP_LEN
-FIFO_DEP_LEN=102400
+FIFO_DEP_LEN=1024
 endif
 
 ifndef AGG_FIFO_DEP_LEN
@@ -301,10 +319,6 @@ endif
 
 ifndef PRED_THR
 PRED_THR=0
-endif
-
-ifndef BLOCKED_DFS
-BLOCKED_DFS=0
 endif
 
 ifndef ABCD
@@ -484,14 +498,6 @@ ifndef LADIES_GCN
 LADIES_GCN=0
 endif
 
-ifndef WORKING_CACHE
-WORKING_CACHE=0
-endif
-
-ifndef FIFO
-FIFO=1
-endif
-
 ifndef CENTRAL_FIFO
 CENTRAL_FIFO=0
 endif
@@ -576,10 +582,6 @@ ifndef FEAT_LEN
 FEAT_LEN=16
 endif
 
-ifndef MODULO
-MODULO=1
-endif
-
 ifndef LINEAR
 LINEAR=0
 endif
@@ -618,7 +620,7 @@ TC=0
 endif
 
 ifndef DEFAULT_DATASET
-DEFAULT_DATASET=1
+DEFAULT_DATASET=0
 endif
 
 sim-files=asic.cpp asic_core.cpp network.cpp stats.cpp config.cpp simple_cache.cpp replacement_state.cpp multiply.cpp
@@ -643,7 +645,7 @@ sim-graphmat-slice: $(sim-files) *.hh $(@)
 	$(CC) $(sim-files) $(FLAGS) $(MACROS)  -L/home/vidushi/graphsim/DRAMSim2/ -ldramsim -o $(OUTFILE) -DGRAPHMAT -DGRAPHMAT_SLICING
 	./$(OUTFILE)
 
-sim-sgu-slice: $(sim-files) *.hh $(@)
+sim-polygraph: $(sim-files) *.hh $(@)
 	$(CC) $(sim-files) $(FLAGS) $(MACROS) -L/home/vidushi/graphsim/DRAMSim2/ -ldramsim -o $(OUTFILE) -DSGU -DSGU_SLICING
 	./$(OUTFILE)
 

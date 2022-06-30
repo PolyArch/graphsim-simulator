@@ -39,30 +39,30 @@ typedef enum
 
 typedef struct
 {
-    Addr_t      tag;         // Tag of line
-    bool        valid;       // Is line valid?
-    bool        exclusive;   // Is line exclusive?
-    bool        dirty;       // Is line dirty?
-    bool        shared_upgrading; // Is line in process of begin upgraded from shared to exclusive?
+    Addr_t tag;            // Tag of line
+    bool valid;            // Is line valid?
+    bool exclusive;        // Is line exclusive?
+    bool dirty;            // Is line dirty?
+    bool shared_upgrading; // Is line in process of begin upgraded from shared to exclusive?
     EvictState evict_state;
-  //    BITVECTOR   sharing_dir; // Directory of which core accessed this line
+    //    BITVECTOR   sharing_dir; // Directory of which core accessed this line
 } LINE_STATE;
 
-typedef enum 
+typedef enum
 {
-    ACCESS_IFETCH      = 0,
-    ACCESS_LOAD        = 1,
-    ACCESS_STORE       = 2,
-    ACCESS_INSPECT     = 3,
-    ACCESS_UNSUPPORT1  = 4,
-    ACCESS_PREFETCH    = 5,
-    ACCESS_WRITEBACK   = 6,
-    ACCESS_RFO         = 7,
-    ACCESS_UPGRADE     = 8,
-    ACCESS_SNOOP       = 9,
-    ACCESS_MAX         = 10
+    ACCESS_IFETCH = 0,
+    ACCESS_LOAD = 1,
+    ACCESS_STORE = 2,
+    ACCESS_INSPECT = 3,
+    ACCESS_UNSUPPORT1 = 4,
+    ACCESS_PREFETCH = 5,
+    ACCESS_WRITEBACK = 6,
+    ACCESS_RFO = 7,
+    ACCESS_UPGRADE = 8,
+    ACCESS_SNOOP = 9,
+    ACCESS_MAX = 10
 } AccessTypes;
 
-#define IS_STORE(X)  (X == ACCESS_STORE || X == ACCESS_WRITEBACK)
+#define IS_STORE(X) (X == ACCESS_STORE || X == ACCESS_WRITEBACK)
 
 #endif
