@@ -15,26 +15,38 @@ class network
 
   public:
     network(asic *host);
+
+    // these functions fill the static routing table for XY routing
     void fill_routing_table();
     void fill_link_map();
     void routeXY(int core_id);
+
+    // this function pulls and pushes data from cores
     void external_routing(int core_id);
     void pull_packets_to_network(int core_id);
     void push_packets_from_network(int core_id);
+
+    // this function implements the router functionality for data incoming and outgoing from network links
     void internal_routing();
+    
+    // utility functions to model the connections
     int get_core_id(int int_link_id);
     int get_link_dest_id(int int_link_id);
     int calc_hops(int src, int dest);
     // int get_core_id(int int_buf_id);
     // int next_destination(int cur_dest, int final_dest);
+
+    // this function receive the memory request packet and create a response traffic to model memory traffic in the simulator
     void serve_memory_requests();
     bool cycle();
     bool buffers_not_empty(bool show);
+
+    // cores use this function to push new packets into the network
     void push_net_packet(int core_id, net_packet cur_tuple);
 
-    // to be used inside core
-    // just push to the next destination: also wait until all packets for
-    // a destination has arrived -- deprecated feature
+    // these functions decode the network packet at the destination core
+
+    // this function pushes the scalar response to the "process" datapath stage
     void decode_scalar_packet(net_packet remote_tuple, int core_id);
     // push the data and send the left over packet again over the network
     void decode_path_multicast(net_packet remote_tuple, int core_id);
@@ -42,24 +54,26 @@ class network
     // is delayed; not sure why prefetch process???
     void decode_real_multicast(net_packet remote_tuple, int core_id);
 
-    // to be used inside network
-    // just a simple encoder
+    // these functions are implemented by the router to reformat a network packet
+
+    // this function creates a scalar packet as a response to memory request
     void encode_scalar_packet(net_packet remote_tuple, int core_id);
-    // push the packet to the nearest destination first
+    // this function removes the current destinations and pick the next direction according to the nearest destination first
     void encode_path_multicast(net_packet remote_tuple, int core_id);
-    // sort the destinations and push each split tuple into multiple smaller
-    // cores
+    // this function sorts the destinations and creates multiple packets that will go in different directions
     void encode_real_multicast(net_packet remote_tuple, int core_id);
 
-    // same as encode: just add link bandwidth
+    // these functions reformat the packets, but transfer them after considering the link bandwidth constraints
     void transfer_scalar_packet(net_packet cur_tuple, int cur_core_id, int i, int j, int &num_pops);
     void transfer_multicast_packet(net_packet cur_tuple, int cur_core_id, int i, int j, int &num_pops);
 
+    // implements the router buffers for latency hiding
     bool can_push_in_network(int core_id);
     bool can_push_in_internal_buffer(int x, int y);
     void update_pops_acc_to_bandwidth(net_packet cur_tuple, int &num_pops);
 
-    // utility functions
+    // these are the utility functions to create different kinds of packets allowed in the network
+    // Please see README to get details about these packets
     net_packet create_dummy_request_packet(int src_id, int dst_id, int req_core);
     net_packet create_scalar_request_packet(int src_id, int dst_id, int req_core, int cb_entry, bool second_buffer);
     net_packet create_scalar_update_packet(int tid, int src_id, vector<iPair> multicast_dst_wgt, DTYPE new_dist);
@@ -67,12 +81,13 @@ class network
     net_packet create_vector_update_packet(int tid, int src_id, vector<iPair> multicast_dst_wgt, DTYPE vertex_data[FEAT_LEN]);
     net_packet create_noopt_vector_update_packet(int src_id, int dst_id, DTYPE vertex_data[FEAT_LEN]);
 
+    // these are utility function to convert the format from the task creation to task execution packet
     red_tuple convert_net_to_red(net_packet packet, int k);
     pref_tuple convert_net_to_pref(net_packet packet, int k);
     net_packet convert_pref_to_net(int req_core, int dfg_id, pref_tuple cur_tuple);
     bool is_remote_read(net_packet cur_tuple);
 
-    // void push_to_prefetch_process(int dest_core, pref_tuple cur_tuple);
+    // after decode, network packets are pushed to the computation datapath
     void push_to_prefetch_process(int dest_core, net_packet cur_tuple, int k);
 
   public:

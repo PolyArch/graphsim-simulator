@@ -59,16 +59,26 @@ class completion_buffer
 {
 public:
   completion_buffer();
+  // This function pushes the data received from memory (edge data here) to a fifo buffer called lsq which next pushes the data to the process stage of the vertex processing pipeline. 
   void cb_to_lsq();
+  // Here we studied an optimization where completion buffer is split into partitions with each maintaining edges of a single vertex 
   void cbpart_to_lsq();
+  // This function checks allocates an entry in completion buffer before sending a request to main memory.
+  // Arguments:
+  // Waiting count: This indicates number of entries to be allotted. It also helps to model implicit synchronization, for example, when the computation should start when the required number of elements have arrived.
   int allocate_cb_entry(int waiting_count);
+  // This function deallocates the entry when the data is ready to be pushed to the computation pipeline.
   int deallocate_cb_entry(int waiting_count);
+  // This function check whether there are available entries in the completion buffer.
+  // If not, new memory request cannot be send.
   bool can_push();
   bool can_push(int reqd_entries);
   bool pipeline_inactive(bool show);
   int peek_lsq_dfg();
+  // This function receives the information from memory. It also contains the meta information that includes operand value (in dataflow, we would know by one-to-one mapping), and source core location to direct data from memory controller to its correct completion buffer entry. This is traditionally implemented in memory controllers. 
   pref_tuple receive_lsq_responses();
-  pref_tuple insert_in_pref_lsq(pref_tuple next_tuple);
+  // pref_tuple insert_in_pref_lsq(pref_tuple next_tuple);
+  // This function checks whether the computation pipeline has space to receive the data responses.
   bool can_push_in_pref_lsq();
 
 public:
@@ -94,18 +104,27 @@ class memory_controller
 public:
   memory_controller(asic *host, stats *stat);
   void empty_delay_buffer();
-  bool send_mem_request_actual(bool isWrite, uint64_t line_addr, pref_tuple cur_tuple, int streamid);
+
   void receive_cache_miss(int line_addr, int req_core_id);
   void update_cache_on_new_access(int core_id, int edge_id, int cur_prio_info);
   void reset_compulsory_misses();
+  // These are interface functions for DRAMSim2
   static void power_callback(double a, double b, double c, double d);
   void read_complete(unsigned data, uint64_t address, uint64_t clock_cycle);
   void write_complete(unsigned id, uint64_t address, uint64_t clock_cycle);
+
+  // this function checks whether any request for the same cache line is pending. It coalesces those requests so that the same response can be used for all requests.
+  bool send_mem_request_actual(bool isWrite, uint64_t line_addr, pref_tuple cur_tuple, int streamid);
+  // this function checks whether the request is a cache hit/miss. If hit, it is served by the cache. Otherwise, it sends request to main memory using DRAMSim2.
   bool send_mem_request(bool isWrite, uint64_t line_addr, pref_tuple cur_tuple, int streamid);
+  // When using cache algorithm variant, for any request to memory, it check whether the request is a cache hit or not.
   bool is_cache_hit(int core, Addr_t paddr, UINT32 accessType, bool updateReplacement, UINT32 privateBankID);
+  // this function captures the overhead to load data in scratchpad at program initiation
   void load_graph_in_memory();
+  // this function prints the statistics related to memory like cache hit rate, memory bandwidth utilization, etc. For detailed explanation, check stats.hh
   void print_mem_ctrl_stats();
 
+  // this function performs "address translation". Here we assume simple placement of data-structures in memory.
   uint64_t get_vertex_addr(int vertex_id);
   uint64_t get_edge_addr(int edge_id, int vid);
 
@@ -160,9 +179,16 @@ public:
   int get_cache_hit_aware_priority(int core_id, bool copy_already_present, int pointer_into_batch, int leaf_id, int batch_width, int num_in_pointer);
   void task_queue_stealing();
   void reset_task_queues();
+
+  // Tasks that do not fit in hardware task queue, are stored in main memory in fifo fashion.
+  // This function pulls those tasks from memory to hardware task queue.
+  // Currently this function do not model the cycles taken to read these tasks from memory
   void pull_tasks_from_fifo_to_tq(int core_id, int tqid);
+  // this function checks whether hardware task queues have space
   bool can_pull_from_overflow(int core_id);
   DTYPE calc_cache_hit_priority(int vid);
+  // this function inserts a new task in the hardware priority queue with "priority"
+  // A single core can have multiple task queues (indexed by tqid), they are selected in round-robin fashion for new task insertion.
   void insert_new_task(int tqid, int lane_id, int core_id, DTYPE priority, task_entry cur_task);
   void insert_global_task(DTYPE timestamp, task_entry cur_task);
   void insert_local_task(int tqid, int lane_id, int core_id, DTYPE priority, task_entry cur_task, bool from_fifo = false);
@@ -173,11 +199,18 @@ public:
   void insert_coarse_grained_task(int row);
   bool can_push_coarse_grain_task();
   mult_task schedule_coarse_grain_task();
-  int chose_new_slice(int old_slice);
-  void push_task_into_worklist(int wklist, DTYPE priority, task_entry cur_task);
 
+  // This function implements the slice scheduling variant where a new slice may be chosen in round-robin fashion or using a work-efficiency-optimized priority order
+  int chose_new_slice(int old_slice);
+
+  // PolyGraph implement also maintains worklist for each of the graph slices
+  // When switching a graph slice, all active tasks in the hardware task queue or the overflow fifo queue, are sent to the worklist.
+  void push_task_into_worklist(int wklist, DTYPE priority, task_entry cur_task);
+  // This function checks whether there are any pending tasks left for the current slice
   bool worklists_empty();
+  // When the new slice starts execution, this function loads the worklist tasks to the task queue
   int move_tasks_from_wklist_to_tq(int slice_id);
+  // This functions returns total number of pending tasks in a program 
   int tot_pending_tasks();
 
   // TODO: not sure what they are doing?
@@ -242,47 +275,88 @@ class scratch_controller
 public:
   scratch_controller(asic *host, stats *stat);
   void push_dangling_vertices(bool second_buffer);
+  // this function performs the spatial partitioning and renames the vertices such that vertices is each partition are ordered
   void perform_spatial_part();
+  // this function implements the chunk-based partitioning in Gemini
   void perform_linear_load_balancing(int slice_id);
-  void perform_bdfs_load_balancing(int slice_id);
+  // this function implements modulo partitioning where vertices are interleaved at a single vertex granularity
   void perform_modulo_load_balancing(int slice_id);
+  // this function performance bdfs traversal as in HATS paper
+  void perform_bdfs_load_balancing(int slice_id);
+  // this function purely optimizes for load balancing where it creates partitions such that each has similar number of low, medium and high degree vertices
   void perform_load_balancing2(int slice_id);
+  // this is similar to above but splits vertices in only two categories: low and high degree
   void perform_load_balancing(int slice_id);
+  // this function uses the traditional METIS for spatial partitioning as well
   void optimize_load();
+  // above spatial partitioning policies only renames the vertices. this function maps those to the cores. We tried different placement so that partitions that have more dependencies are spatially close to each other, but it is not longer active.
   void map_grp_to_core();
+  // this function prints statistics to test how much does the current spatial partitioning policy optimizes for locality.
+  // Statistic is the ratio of remote edges to local edges.
   void locality_test(int slice_id);
+  // this function performs linear mapping, similar to linear_load_balancing
+  // TODO (@vidushi): remove redundancy
   void linear_mapping();
+
+  // these are utility functions to implement the recursive graph traversal algorithms
   void bdfs_algo(int s);
   void BDFSUtil(int v);
   void DFS(int s, int slice_id);
   void DFSUtil(int v);
   void BFS(int s, int slice_id);
+
+  // this is an old function where we attempted partitioning by using the probability of a vertex being accessed
   void read_mapping();
 
+  // this function converts the metis output to a graph traversal algorithm
   void generate_metis_format();
   void read_mongoose_slicing();
   void read_metis_slicing();
+
+  // this function prints the statistics for the number of nodes that have edges outgoing to a different slice
+  // this statistic is to test when to switch slices
+  // TODO (@vidushi): these three functions also seem redundant. Check!
   void get_sync_boundary_nodes();
   void get_linear_sgu_boundary_vertices();
   void get_slice_boundary_nodes();
+
+  // Note: These functions are hacks to model memory request traffic and latency overheads.
+  // We assume that there are four memory controllers for 16 PolyGraph cores.
+  // This function returns where in the system should request be routed to talk to the corresponding memory controller.
   int get_mc_core_id(int dst_id);
+  // This function returns out of four memory controllers, where should the memory request be directed to
   int get_mem_ctrl_id(int dst_id);
+  // This function maps the graph traversal to the scratchpad banks.
+  // Specifically, it implements cluster size in multi-level spatial partitioning.
   int get_grp_id(int dst_id);
-  // int get_local_scratch_id(int dst_id);
+  // this function internally calls get_grp_id to return the mapped core.
   int get_local_scratch_id(int dst_id, bool compute_placement = true);
   int avg_remote_latency();
+  // this function implements the hilbert algorithm so that the partitions are placed in cores so that consecutive partitions are spatially close to each other
   int get_hilbert_core(int cluster_id);
   void rot(int n, int *x, int *y, int rx, int ry);
+
+  // this function considers how a graph's spatial partitioned in placed across scratchpad banks.
+  // this function assumes global scratchpad across cores, where cores communicate to this scratchpad via giant crossbar.
   int get_global_bank_id(int dst_id);
+  // this function return the bank id within the scratchpad bank at a core
   int get_local_bank_id(int dst_id);
-  int get_slice_num(int vid);
+  // this function implements a special data mapping scheme that stochastically minimizes bank conflicts (important in graph processing)
   int use_knh_hash(int i);
+  // this returns the slice number using the spatial partitioning policy
+  int get_slice_num(int vid);
+  // this functions distributes the vertices in buckets with different degrees. It can potentially be used for future load balancing strategies.
   void fix_in_degree();
+  // these functions are deprecated, these print statistics of the number of unique vertices that have incoming edges from different sources (add all those sources)
   void graphicionado_slice_fill();
   void sgu_slice_fill();
+  // this function tests the effectiveness of the spatial partitioning policy in terms of the total number of incoming and outgoing edges within a slice
   void load_balance_test();
+  // this function prints the output of spatial partitioning policy: original vertex id and renamed vertex id.
   void print_mapping();
 
+  // this function sends and receives memory requests from the scratchpad
+  // these implement the pull variant in graph processing
   void send_scratch_request(int req_core_id, uint64_t scratch_addr, pref_tuple cur_tuple);
   void receive_scratch_request();
 
@@ -336,7 +410,7 @@ public:
   asic();
 
   void test_mult_task();
-
+  
   bool is_leaf_node(int vid);
   void seq_edge_update_stream(int cur_edges, int prev_edges, int original_graph_vertices);
   void rand_edge_update_stream(int part);
@@ -344,56 +418,105 @@ public:
   void reset_algo_switching();
   void vertex_memory_access(red_tuple cur_tuple);
   void graphmat_slice_configs(red_tuple cur_tuple);
+  
+  // initializes vertex property data structure
   void init_vertex_data();
+  // generates random numbers that may be required for initialization in ML
+  // algorithms like machine learning (ML) and collaborative filtering (CF)
   double randdouble();
+  // fills correct vertex property to check whether the accelerator calculated
+  // the correct answer
+  // this applies only to workloads with fixed answer lke BFS, SSSP, and CC.
   int fill_correct_vertex_data();
+  // reads input graph file which is in the format <src_id, dst_id, wgt>.
+  // TODO (@vidushi): For certain graphs, we have hardcoded some patterns. We
+  // will make them read modes.
   void read_graph_structure(string file, int *offset, edge_info *neighbor, bool initialize_vd, bool is_csc_file);
+  
   int get_degree(int vid);
   void ladies_sampling();
   void write_csr_file();
-
   int get_middle_rank(int factor);
   void distribute_one_task_per_core();
+  
+  // insert initial tasks to implement a workload.
   void initialize_simulation();
+  // this function is used to calculate per-cycle statistics to study dynamic
+  // behavior and do cycle-level performance debugging
   void update_stats_per_cycle();
+
   void central_task_schedule();
   int reconfigure_fine_core(int core_id, int cores_to_mult);
   void flush_multiplication_pipeline(int core_id);
   void update_heterogeneous_core_throughput();
+  
+  // it prints intermediate metrics to know how the algorithm is progressing
+  // it is useful for simulations that take long time
   void print_simulation_status();
+
   void check_async_slice_switch();
+  
   void schedule_tasks(float &edges_served, int &max_edges_served, float &lbfactor);
+  // it is called at coarse-grained phases to check whether an algorithm should
+  // be switched
   void perform_algorithm_switching(int slice_id, int mem_eff);
   int calc_dyn_reuse();
+
+  // prints the error in collaborative filtering -- it is useful to track the
+  // algorithm convergence
   void print_cf_mean_error();
 
   void simulate_dyn_graph();
+
   void call_simulate();
+  // It is a central function that calls all architecture components.
+  // It also performs data and task orchestration when switching slices
   void simulate();
+
   void simulate_ideal();
+  
+  // It checks whether the vertex property is updated enough to active
+  // a vertex.
+  // It also checks whether reuse_factor allows to activate this new vertex now
+  // or later.
   bool should_spawn_sync_task(int vid, int reuse_factor);
   void initialize_stats_per_graph_round();
   int task_recreation_during_sync();
+  // It reads the pending tasks corresponding to a slice_id into current task
+  // queue. It also checks whether to push new tasks in the worklist.
+  // Returns: whether any tasks are pushed for execution.
   int task_recreation_during_sync(int slice_id, bool push_in_worklist, int reuse_factor);
   void update_gradient_of_dependent_slices(int slice_id);
+
   void synchronizing_sync_reuse_lost_updates(int reuse_factor);
+  // This functions implements the functionality of control core where it calls
+  // slices according to "slice scheduling" variant and also performs
+  // bookkeeping when switching slices.
   void simulate_slice(); // trying to write a general function for different slice scheduling and update visibility techniques to find any bugs/opportunities
   void simulate_sgu_slice();
   // TODO: write this function
   void simulate_graphmat_slice();
   void simulate_blocked_async_slice();
+
+  // It prints final statistics and check for the correctness of the simulated
+  // algorithm.
   void finish_simulation();
 
-  // workload information
-  int get_update_operation_latency();
-  int get_update_operation_throughput(int src_id, int dst_id);
+  // These functions implement workload-specific properties.
+  // First, they return the computation output of three function in vertex processing template: process on edges,
+  // reduce on vertex property,and apply for propagating updates.
+  // Should_spawn_task returns whether a new vertex can be updated.
   DTYPE cf_update(int src_id, int dst_id, DTYPE edge_wgt);
   DTYPE process(DTYPE edge_wgt, DTYPE dist);
   DTYPE reduce(DTYPE old_value, DTYPE new_value);
   DTYPE apply(DTYPE new_dist, int updated_vid);
   bool should_spawn_task(float a, float b);
   bool should_cf_spawn_task(int vid);
-
+  // These two functions are parameters to the vertex reduce function.
+  // Returns: latency/throughput of the operation performed in reduce.
+  int get_update_operation_latency();
+  int get_update_operation_throughput(int src_id, int dst_id);
+ 
   // utility functions
   bool correctness_check();
   void print_output();
@@ -408,7 +531,11 @@ public:
   void push_dummy_packet(int src_core, int dest_core, bool two_sided);
   void print_sensitive_subgraph();
 
-  // data mapping
+  // Spatial partitioning modifies vertex_id such that vertices in a single
+  // partition also have vertex IDs closeby.
+  // This function distributes them in partition, and considers slight variants
+  // is partition size.
+  // Returns: Scratchpad bank a destination will will be stored.
   int get_grp_id(int dst_id);
   void save_reuse_info();
 
@@ -419,16 +546,29 @@ public:
   void update_cache_on_new_access(int core_id, int edge_id, int cur_prio_info);
   bool should_abort_first(DTYPE a, DTYPE b);
 
-  // DRAMSim interface
+  // These functions interface to DRAMSim2.
+  // Read_complete is called when the response for an address is available in
+  // the "data" variable at DRAMSim2's clock_cycle
+  // Write_complete is called on writes but instead of data, it returns id (?)
   void read_complete(unsigned, uint64_t, uint64_t);
   void write_complete(unsigned, uint64_t, uint64_t);
 
+  // This function simulates initial operations like loading data from memory
+  // to scratchpads.
   void load_graph_in_memory();
+  // When a request is miss in the cache, certain hints to the scheduler may be
+  // sent (not applicable to PolyGraph)
   void receive_cache_miss(int line_addr, int req_core_id);
   void slice_init();
 
   void read_mongoose_slicing();
+  // This function reads the output from METIS partitioner and updates
+  // vertex_id such that each temporal slice has vertices with sequential ID.
+  // This helps to use modulo functions for both spatial scheduling and
+  // blocking updates to vertices in different slices.
   void read_metis_slicing();
+  // This function implement KNH hash mapping of data (indexed by i) across 16 banks. 
+  // Returns: bank id where i is stored.
   int use_knh_hash(int i);
   // void serve_mshr_requests();
   void common_sampled_nodes();

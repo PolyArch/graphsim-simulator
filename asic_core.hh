@@ -16,29 +16,67 @@ class asic_core
 public:
   asic_core();
 
+  // Reading operand 2 in process stage
+  // this function reads data of first operand either from memory or scratchpad
   virtual void set_src_dist(task_entry cur_task, pref_tuple &next_tuple);
+
+  // this is deprecated over the above function
   virtual void set_dist_at_dequeue(task_entry &cur_task, pref_tuple &next_tuple);
+
+  // Dynamic task creation stage
+  // this function pushes the new task at a fixed task enqueue rate
+  // for asynchronous slice variants, it also checks whether the updates belong to the current working slice or not. If no, new updates are pushed to the buffer in memory
   virtual void create_async_task(DTYPE priority_order, task_entry new_task);
+  
+  // Aggregation buffer stage
+  // this is deprecated for now, it only works as a latency hiding buffer
   virtual void push_live_task(DTYPE priority_order, task_entry new_task);
   virtual void arob_to_pref();
+
+  // Prefetching stage
+  // first two function: access edges either independently or together (so that we multicast them together)
+  // Third function: access source vertex property for synchronous algorithms that maintain two copies
   virtual int access_edge(task_entry cur_task, int edge_id, pref_tuple next_tuple);
   virtual int access_all_edges(int line_addr, task_entry cur_task, pref_tuple next_tuple);
   virtual void access_src_vertex_prop(task_entry cur_task, pref_tuple next_tuple);
+
+  // consumes the data received from memory. LSQ keeps the returned edges.
+  virtual void push_lsq_data(pref_tuple cur_tuple);
+  virtual void consume_lsq_responses(int lane_id);
+  
+  
+  // Task queue dispatch: initial stage
+  // It pops from the tasks and pushes to the prefetch stage
+  // If the task queue has space, it pulls new tasks from the overflow buffer
   virtual void dispatch(int tqid, int lane_id);
+  // this function pops tasks from the overflow buffer and inserts them into the hardware task queue using the latest vertex property from scratchpad
+  virtual void fill_task_queue();
+
+  // For pull variants, we might need to read vertex property, of destination vertices, from the remote scratchpad. This function send remote scratchpad read request
   virtual void pull_scratch_read(); // Should be sent to pull after this...
   void push_scratch_data(pref_tuple cur_tuple);
   void push_scratch_data_to_pipeline();
+
+  // Process computation stage
   virtual void process(int lane_id);
+
+  // Reduce task creation stage
+  // Here the returned edge data is encapsulated as task and sent as independent tasks over the network
+  // Or multiple edge data are combined to multicast update tasks over the network
   virtual void reduce(int lane_id);
-  virtual void serve_atomic_requests();      // int lane_id); // since different for each model
-  virtual void spec_serve_atomic_requests(); // int lane_id); // since different for each model
+
+  // Reduce computation stage
+  // This stage reads data from scratchpad and updates it using the new vertex property
+  virtual void serve_atomic_requests();
+  // it is the same as old function, but if the vertex property is updated, it creates the new task instantly
+  virtual void spec_serve_atomic_requests();
+  
+  // Deprecated.
+  // When new vertices are activated, they may be pushed to the aggregation buffer before the task queue.
   virtual void drain_aggregation_buffer(int index);
   virtual void arbit_aggregation_buffer(int index);
-  virtual void push_lsq_data(pref_tuple cur_tuple);
-  virtual void consume_lsq_responses(int lane_id);
-  void access_cache_for_gcn_updates(pref_tuple cur_tuple, int start_offset, int end_offset);
-  virtual void insert_vector_task(pref_tuple cur_tuple, bool spawn, int dfg_id = -1);
-  virtual void generate_gcn_net_packet(pref_tuple cur_tuple, int start_offset, int end_offset);
+  
+  // these make packets during the reduce operation to be sent over the network
   virtual void send_multicast_packet(pref_tuple cur_tuple, int start_offset, int end_offset);
   virtual void send_scalar_packet(pref_tuple cur_tuple);
 
@@ -48,7 +86,36 @@ public:
     cout << "Wrong cycle function\n";
     return 0;
   };
+  // these are special functions for vector workloads
+  
+  // the update operation now consumes latency higher than 1 cycle.
+  // this function considers the latency and throughput of updating a vector
+  virtual void insert_vector_task(pref_tuple cur_tuple, bool spawn, int dfg_id = -1);
+  // this function pushes the updates to the next stage when latency number of cycles have passed
+  virtual void forward_atomic_updates(int dfg_id, int lane_id);
+  // this function implements a multicast packet where payload is a vector
+  virtual void generate_gcn_net_packet(pref_tuple cur_tuple, int start_offset, int end_offset);
+
+  // reduce now needs to send vector multicast update packets
   virtual void cf_reduce(int lane_id, int dfg_id = -1);
+  // this checks for conflicts when executing multiple update tasks
+  virtual bool check_atomic_conflict(int lane_id, int feat_len, int cur_vid);
+
+  // these check whether no data is available in the datapath pipeline
+  // this is a condition to complete the program
+  virtual bool pipeline_inactive(bool show);
+  virtual bool local_pipeline_inactive(bool show);
+
+  // implements the queues between datapath pipeline stages
+  virtual bool can_push_in_prefetch(int lane_id);
+  virtual bool can_push_in_process(int lane_id);
+  virtual bool can_push_in_reduce(int lane_id);
+  virtual bool can_push_in_local_bank_queue(int bank_id);
+  virtual bool can_push_in_gcn_bank();
+  virtual bool can_push_to_cgra_event_queue();
+  virtual bool serve_priority_hits();
+  
+  void access_cache_for_gcn_updates(pref_tuple cur_tuple, int start_offset, int end_offset);
   virtual bool can_serve_hit_updates();
   virtual bool can_serve_miss_updates();
   virtual void split_updates_in_cache();
@@ -57,29 +124,20 @@ public:
   virtual bool is_queue_head_hit(deque<pref_tuple> *target_queue);
   virtual void push_gcn_cache_hit(pref_tuple cur_tuple);
   virtual void push_gcn_cache_miss(pref_tuple cur_tuple);
-  virtual void fill_task_queue();
+
   virtual void issue_requests_from_pending_buffer(int lane_id);
-  virtual void forward_atomic_updates(int dfg_id, int lane_id);
   virtual void forward_multiply_opn(int lane_id);
+  
   virtual void empty_crossbar_input();
   virtual void automatic_partition_profile();
   virtual void update_affinity_on_evict(int evict_vid, int old_core, int new_core);
   virtual int get_evict_core(int evict_vid);
   virtual int choose_eviction_cand();
-  virtual bool check_atomic_conflict(int lane_id, int feat_len, int cur_vid);
-  virtual bool pipeline_inactive(bool show);
-  virtual bool local_pipeline_inactive(bool show);
+
   virtual void recursively_erase_dependent_tasks(int dst_id, int tid, int dst_timestamp, int rem_depth);
   virtual void delete_one_timestamp(int dst_id, int tid, int dst_timestamp);
 
-  virtual bool can_push_in_prefetch(int lane_id);
-  virtual bool can_push_in_gcn_bank();
-  virtual bool can_push_in_process(int lane_id);
-  virtual bool can_push_in_reduce(int lane_id);
-  virtual bool can_push_in_local_bank_queue(int bank_id);
-  virtual bool can_push_to_cgra_event_queue();
-  virtual bool serve_priority_hits();
-
+  // this implements the break optimization for the pull algorithm variant
   virtual void trigger_break_operations(int vid);
   virtual int allocate_cb_entry_for_partitions(bool first_entry, int dfg_id, int index, bool last_entry);
 

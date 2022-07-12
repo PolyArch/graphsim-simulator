@@ -38,6 +38,7 @@ public:
 
   int _stat_dram_add_on_access = 0;
 
+  // number of synchronization barriers during the algorithm whether to switch slices or activate vertices
   int _stat_barrier_count = 0;
   int _stat_agg_barrier = 0;
   int _stat_num_misspeculations = 0; // required for espresso
@@ -46,6 +47,7 @@ public:
   uint64_t _stat_tot_created_edge_tasks = 0;
   uint64_t _stat_tot_created_edge_second_buffer_tasks = 0;
   uint64_t _stat_tot_data_parallel_tasks = 0;
+  // total number of edges executed during the algorithm (this tell GTEPS)
   uint64_t _stat_tot_finished_edges = 0;
   uint64_t _stat_prev_finished_edges = 0;
   uint64_t _stat_tot_finished_first_buffer_edge_tasks = 0;
@@ -60,6 +62,7 @@ public:
   // different work metric for triangle counting
   uint64_t _stat_tot_triangles_found = 0;
 
+  // total number of updates that were coalesced and did not need to execute
   int _stat_tot_aborted_edges = 0;
   int _stat_tot_tasks_dequed = 0;
 
@@ -90,6 +93,7 @@ public:
   int _stat_extra_mem_access_reqd = 0;
   int _stat_blocked_with_conflicts = 0;
   uint64_t _stat_dram_cache_accesses = 0;
+  // this is total data required to be read from DRAM
   uint64_t _stat_dram_bytes_requested = 0;
   // int _stat_dram_accesses_requested=0;
   float _stat_cache_line_util = 0;
@@ -126,6 +130,7 @@ public:
 
   int _stat_max_fifo_storage = 0;
 
+  // this is the number of update requests per bank. It shows the average load imbalance across banks.
   int _stat_num_req_per_bank[num_banks];
   int _stat_dist_tasks_dequed[core_cnt];
   int _stat_dist_edges_dequed[core_cnt];
