@@ -42,14 +42,14 @@ Here is the description of the most commonly used statistics.
 * Exact hit rate = number of hits to the cache divided by the total number of accesses to the cache
  
 ## Simulator knobs
-Below I put the most common knobs used to try different algorithm variants:
+Below I have put the most common knobs used to try different algorithm variants:
 * Update-visibility = for async: use sim-polygraph, for sync-slice: ise sim-polygraph with ABCD=1, for graph-sync: use sim-graphmat mode for
 * FIFO = round-robin or priority vertex scheduling
 * WORKING_CACHE = whether to use non-sliced or sliced
 * SLICE_COUNT = number of slices for slice scheduling
 * PULL = pull or push (push by default)
 
-These are the knobs provided by the simulator to change the studied algorithm or evaluated architecture (all declared in config.cpp).
+These are the knobs provided by the simulator to change the studied algorithm or evaluated architecture (all declared in config.hh).
 
 | Feature           | Allowed input dimensions                                                                                | Representative                                      |
 |-------------------|---------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
@@ -70,3 +70,21 @@ These are the knobs provided by the simulator to change the studied algorithm or
 | slice_sched_type  | roundrobin, locality, priority                                                                          |                                                     |
 | update_visibility | synch, async-coarse, asyncfine, dyn_graph fine-sync (dijkstra?), speculative                            |                                                     |
 | dyn_algo_type     | inc, recomp                                                                                             |                                                     |
+
+## Graphsim components
+
+1. **completion buffer:** This class implements a reorder buffer for the requests to main memory.
+2. **memory controller:** This class is responsible to send requests and receive
+3. response to/from caches or main memory.
+4. **task controller:** This class implements the **vertex scheduling** algorithm variant
+5. for asynchronous algorithms.
+6. **scratch controller:** This class implements spatial partitioning of graph across
+scratchpad banks. It also handles atomic updates to these banks.
+7. **asic:** This class implements the control core, which manages the **slice
+scheduling** variant and data orchestraction during slice switching (See Figure
+8 in PolyGraph paper (https://ieeexplore.ieee.org/document/9499835).
+8. **asic core:** This class implements the vertex processing algorithm's datapath. It
+implements both *pull/push* and *update scheduling* variants.
+The stages in the datapath are:
+                    -> Prefetch source vertex prop
+Task queue dispatch -> Prefetch edge -> process edge -> reduce -> atomic update -> dynamic task creation (apply) -> Aggregation buffer stage -> Push to task queue
