@@ -5074,7 +5074,11 @@ DTYPE asic::process(DTYPE edge_wgt, DTYPE dist)
   }
   else
   { // same for bfs,sssp,astar
-    return edge_wgt + dist;
+    if(_config->_algo==cc) {
+      return dist;
+    } else {
+      return edge_wgt + dist;
+    }
   }
 }
 

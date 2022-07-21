@@ -56,7 +56,7 @@ endif
 
 # should i keep it equal to core_cnt?
 ifndef num_banks
-num_banks=256
+num_banks=16
 endif
 
 ifndef MODULO
