@@ -5074,11 +5074,7 @@ DTYPE asic::process(DTYPE edge_wgt, DTYPE dist)
   }
   else
   { // same for bfs,sssp,astar
-    if(_config->_algo==cc) {
-      return dist;
-    } else {
       return edge_wgt + dist;
-    }
   }
 }
 
@@ -6842,12 +6838,25 @@ void asic::slice_init()
 #if PULL == 1
   degree = _csr_offset[_src_vid + 1] - _csr_offset[_src_vid];
 #endif
-  assert(degree != 0 && "source vertex degree is 0, deadlock...");
-  task_entry cur_task(_src_vid, _offset[_src_vid]);
-  _virtual_finished_counter++;
-  int wklist = _scratch_ctrl->get_slice_num(_src_vid);
-  _task_ctrl->push_task_into_worklist(wklist, 0, cur_task);
-  cout << "Pushed new src_vid: " << _src_vid << " to worklist: " << wklist << " with degree: " << degree << endl;
+  if (_config->_acc) {
+    for(int v=0; v<V; ++v) {
+      int degree = _offset[v + 1] - _offset[v];
+      if(degree==0) continue;
+      task_entry cur_task(v, _offset[v]);
+      _virtual_finished_counter++;
+      int wklist = _scratch_ctrl->get_slice_num(v);
+      _task_ctrl->push_task_into_worklist(wklist, v, cur_task);
+      // cout << "Pushed new src_vid: " << v << " to worklist: " << wklist << " with degree: " << degree << endl;
+    }
+ 
+  } else {
+    assert(degree != 0 && "source vertex degree is 0, deadlock...");
+    task_entry cur_task(_src_vid, _offset[_src_vid]);
+    _virtual_finished_counter++;
+    int wklist = _scratch_ctrl->get_slice_num(_src_vid);
+    _task_ctrl->push_task_into_worklist(wklist, 0, cur_task);
+    cout << "Pushed new src_vid: " << _src_vid << " to worklist: " << wklist << " with degree: " << degree << endl;
+  }
   return;
 #endif
   // read slice files and initialize worklists: it will include all incoming
@@ -7910,6 +7919,7 @@ DTYPE task_controller::calc_cache_hit_priority(int vid)
 // current vertex
 void task_controller::insert_new_task(int tqid, int lane_id, int core_id, DTYPE priority, task_entry cur_task)
 {
+  // cout << "inserting new task at core: " << core_id << " and vertex: " << cur_task.vid << " distance: " << _asic->_scratch[cur_task.vid] << endl;
   // if(_asic->_config->_prac==0 && _asic->_config->_algo==bfs) {
   //   int degree = _asic->_offset[cur_task.vid+1] - _asic->_offset[cur_task.vid];
   //   if(degree!=0) {
